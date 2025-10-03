@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package services;
+
+service ServiceA {
+  rpc DoSomething (Request) returns (Response);
+}
+
+service ServiceB {
+  rpc Calculate (Request) returns (Response);
+}
+
+message Request {
+  string input = 1;
+}
+
+message Response {
+  string output = 1;
+}
