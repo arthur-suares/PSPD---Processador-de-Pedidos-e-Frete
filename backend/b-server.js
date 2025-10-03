@@ -6,7 +6,7 @@ const grpcObj = grpc.loadPackageDefinition(packageDef).services;
 
 function calculate(call, callback) {
   const input = call.request.input;
-  const result = `Resultado B: ${input.length}`;
+  const result = `gRPC Server (A) processou a requisição. Valor recebido de input: ${input}`;
   callback(null, { output: result });
 }
 

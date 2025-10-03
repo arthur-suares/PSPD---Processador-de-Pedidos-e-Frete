@@ -6,7 +6,7 @@ const grpcObj = grpc.loadPackageDefinition(packageDef).services;
 
 function doSomething(call, callback) {
   const input = call.request.input;
-  callback(null, { output: `A processou: ${input}` });
+  callback(null, { output: `gRPC Server (A) processou a requisição. Valor recebido de input: ${input}` });
 }
 
 const server = new grpc.Server();
