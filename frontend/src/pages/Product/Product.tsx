@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import styles from "./Product.module.css";
 
 interface ProductType {
@@ -17,6 +17,7 @@ interface ProductProps {
 
 const Product = ({ products }: ProductProps) => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const product = products.find((p) => p.id === Number(id));
 
   const [cep, setCep] = useState("");
@@ -35,6 +36,9 @@ const Product = ({ products }: ProductProps) => {
 
   return (
     <div className={styles.container}>
+      <button className={styles.backButton} onClick={() => navigate("/")}>
+        ← Voltar
+      </button>
       <div className={styles.imageContainer}>
         <img src={product.image} alt={product.name} className={styles.productImage} />
       </div>
