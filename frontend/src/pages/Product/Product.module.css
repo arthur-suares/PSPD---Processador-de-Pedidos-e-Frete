@@ -1,0 +1,98 @@
+.container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2rem;
+  padding: 2rem;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.imageContainer {
+  flex: 1;
+  min-width: 300px;
+  max-width: 400px;
+}
+
+.productImage {
+  width: 100%;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+.info {
+  flex: 1;
+  min-width: 300px;
+  max-width: 500px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.productName {
+  font-size: 2rem;
+  font-weight: bold;
+}
+
+.productDescription {
+  font-size: 1rem;
+  color: #9b9b9b;
+}
+
+.productPrice {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #BE6E46;
+}
+
+.emEstoque {
+  color: #28a745;
+  font-weight: bold;
+  font-size: 18px;
+}
+
+.foraDeEstoque {
+  color: #c0392b;
+  font-weight: bold;
+  font-size: 18px;
+}
+
+.frete {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.frete input {
+  flex: 1;
+  padding: 1rem;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 18px;
+}
+
+.frete button {
+  padding: 12px 25px;
+  background-color: #BE6E46;
+  color: white;
+  font-size: 18px;
+  font-weight: bold;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.3s ease, transform 0.1s ease;
+}
+
+.frete button:hover {
+  background-color: #C57D59;
+}
+
+.frete button:active {
+  background-color: #B56740;
+  transform: translateY(1px);
+}
+
+.freteResultado {
+  margin-top: 1rem;
+  font-weight: bold;
+  font-size: 18px;
+}
