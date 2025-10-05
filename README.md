@@ -11,21 +11,33 @@ O frontend está disponível na porta `5173`. Para rodar acesse a pasta frontend
 ⋊> ~/P/frontend on main ⨯ npm run dev
 ```
 
-Quanto ao backend, de dentro da pasta do back rode:
-
+Quanto ao backend, rode:
 ```bash
-⋊> ~/P/backend on main ⨯ npm i
-⋊> ~/P/backend on main ⨯ npm run start:all
+
+# Setup completo (instala dependências e gera proto)
+make setup
+
+# Iniciar todos os servers (A, B e P)
+make start-all
+
+# Parar todos os servers
+make stop
+
+# Ver todos os comandos
+make help
 ```
 
 Para rodar apenas um serviço gRPC específico, basta usar algum dos scripts abaixo:
 
 ```bash
-⋊> ~/P/backend on main ⨯ npm run start:a
-## ou
-⋊> ~/P/backend on main ⨯ npm run start:b
-## ou
-⋊> ~/P/backend on main ⨯ npm run start:p
+# Iniciar apenas o server A
+make start-a
+
+# Iniciar apenas o server B
+make start-b
+
+# Iniciar apenas o server P
+make start-p
 ```
 
 As requisições que podem ser feitas por postman nas rotas:
