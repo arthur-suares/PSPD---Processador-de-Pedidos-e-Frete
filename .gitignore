@@ -1,0 +1,11 @@
+# Arquivos gerados pelo protoc
+backend/service_pb2.py
+backend/service_pb2_grpc.py
+backend/__pycache__/
+
+# Node modules
+backend/node_modules/
+frontend/node_modules/
+
+# Ambiente virtual Python
+backend/venv/

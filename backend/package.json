@@ -1,12 +1,11 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "main": "a-server.js",
+  "type": "module",
+  "main": "p-server.js",
   "scripts": {
-    "start:a": "node a-server.js",
-    "start:b": "node b-server.js",
-    "start:p": "node p-server.js",
-    "start:all": "npm-run-all --parallel start:a start:b start:p"
+    "start": "node p-server.js",
+    "start:p": "node p-server.js"
   },
   "keywords": [],
   "author": "",
