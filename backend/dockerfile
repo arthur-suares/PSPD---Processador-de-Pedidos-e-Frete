@@ -1,0 +1,37 @@
+# Base image
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# Copy dependency file and install
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install Node.js (use full package update/cleanup for compatibility)
+RUN apt-get update && apt-get install -y \
+    nodejs \
+    npm \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Copy the rest of your backend code
+COPY . .
+
+# Debug: Check what files are available
+RUN find . -name "*.proto" -type f 2>/dev/null || echo "No proto files found"
+
+# Generate gRPC Python files (with error handling)
+RUN if [ -f "service.proto" ]; then \
+        python -m grpc_tools.protoc --proto_path=. --python_out=. --grpc_python_out=. service.proto; \
+    elif [ -f "./proto/service.proto" ]; then \
+        python -m grpc_tools.protoc --proto_path=./proto --python_out=. --grpc_python_out=. ./proto/service.proto; \
+    else \
+        echo "Warning: No service.proto file found. Please check the file location."; \
+    fi
+
+# Expose backend port
+EXPOSE 5000
+
+# Run your server
+CMD ["python", "a_server.py"]
