@@ -2,14 +2,53 @@ syntax = "proto3";
 
 package services;
 
+// ======================
+// Serviço A - Produtos
+// ======================
 service ServiceA {
-  rpc DoSomething (Request) returns (Response);
+  rpc ListarProdutos (Empty) returns (ListaProdutosResponse);
+  rpc ObterProduto (ProdutoRequest) returns (ProdutoResponse);
 }
 
+// ======================
+// Serviço B - Estoque
+// ======================
 service ServiceB {
-  rpc Calculate (Request) returns (Response);
+  rpc ObterEstoque (EstoqueRequest) returns (EstoqueResponse);
 }
 
+// ======================
+// Mensagens compartilhadas
+// ======================
+
+message Empty {}
+
+message ProdutoRequest {
+  string id = 1;
+}
+
+message ProdutoResponse {
+  string id = 1;
+  string nome = 2;
+  string descricao = 3;
+  double preco = 4;
+}
+
+message ListaProdutosResponse {
+  repeated ProdutoResponse produtos = 1;
+}
+
+message EstoqueRequest {
+  string produto_id = 1;
+}
+
+message EstoqueResponse {
+  string produto_id = 1;
+  int32 quantidade = 2;
+  string localizacao = 3;
+}
+
+// Mensagens genéricas usadas nos testes
 message Request {
   string input = 1;
 }

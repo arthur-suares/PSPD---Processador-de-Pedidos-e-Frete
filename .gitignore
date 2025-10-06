@@ -9,3 +9,5 @@ frontend/node_modules/
 
 # Ambiente virtual Python
 backend/venv/
+docker-data
+.env
