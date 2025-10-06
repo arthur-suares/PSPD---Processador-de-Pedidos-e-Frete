@@ -18,6 +18,7 @@ const estoqueClient = new grpcObject.ServiceB(
 
 const app = express();
 const PORT = 3000;
+app.use(express.json());
 
 app.get("/produtos", (req, res) => {
   produtoClient.ListarProdutos({}, (err, response) => {
@@ -34,6 +35,40 @@ app.get("/produto/:id", (req, res) => {
       if (err2) return res.json({ ...produto, estoque: null });
       res.json({ ...produto, estoque });
     });
+  });
+});
+
+app.post("/criarProduto", (req, res) => {
+  const { nome, descricao, preco } = req.body;
+
+  produtoClient.CriarProduto({ nome, descricao, preco }, (err, response) => {
+    if (err) return res.status(500).json({ error: err.details });
+    res.json({
+      message: "Produto criado com sucesso!",
+      produto: response
+    });
+  });
+});
+
+app.put("/produto/:id", (req, res) => {
+  const { id } = req.params;
+  const { nome, descricao, preco } = req.body;
+
+  produtoClient.EditarProduto({ id, nome, descricao, preco }, (err, response) => {
+    if (err) return res.status(500).json({ error: err.details });
+    res.json({
+      message: "Produto atualizado com sucesso!",
+      produto: response
+    });
+  });
+});
+
+app.delete("/produto/:id", (req, res) => {
+  const { id } = req.params;
+
+  produtoClient.DeletarProduto({ id }, (err, response) => {
+    if (err) return res.status(500).json({ error: err.details });
+    res.json(response);
   });
 });
 
