@@ -71,3 +71,18 @@ POST em `http://localhost:3000/api/calculate`
 }
 ```
 Dizendo que o serviço `A` de gRPC processou a requisição
+
+## Banco de dados
+
+Para rodar o banco, no diretório raiz do projeto rode
+
+```bash
+docker compose up
+```
+
+Com o banco rodando, rode as migrações das tabelas
+
+```bash
+npx prisma migrate dev
+```
+

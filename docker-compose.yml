@@ -1,4 +1,24 @@
+version: '3.8'
+
 services:
+  db:
+    image: postgres:17
+    container_name: pspd-db
+    restart: always
+    ports:
+      - "${DB_PORT}:5432"
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - ./docker-data/db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: ./backend
@@ -6,6 +26,15 @@ services:
     ports:
       - "5000:5000"
     restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import socket; s = socket.socket(); s.connect(('localhost', 5000)); s.close()\" || exit 1"]
       interval: 30s
