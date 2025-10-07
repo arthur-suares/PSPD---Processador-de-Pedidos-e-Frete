@@ -3,3 +3,4 @@ grpcio-tools==1.60.0
 grpcio
 grpcio-tools
 protobuf
+psycopg2-binary==2.9.9

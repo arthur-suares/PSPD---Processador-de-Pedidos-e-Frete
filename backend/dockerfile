@@ -8,30 +8,40 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Node.js (use full package update/cleanup for compatibility)
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     nodejs \
     npm \
+    postgresql-client \
+    netcat-traditional \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
 # Copy the rest of your backend code
 COPY . .
 
-# Debug: Check what files are available
-RUN find . -name "*.proto" -type f 2>/dev/null || echo "No proto files found"
+# Generate gRPC Python files INTO the proto directory
+RUN python -m grpc_tools.protoc \
+    --proto_path=./proto \
+    --python_out=./proto \
+    --grpc_python_out=./proto \
+    ./proto/service.proto
 
-# Generate gRPC Python files (with error handling)
-RUN if [ -f "service.proto" ]; then \
-        python -m grpc_tools.protoc --proto_path=. --python_out=. --grpc_python_out=. service.proto; \
-    elif [ -f "./proto/service.proto" ]; then \
-        python -m grpc_tools.protoc --proto_path=./proto --python_out=. --grpc_python_out=. ./proto/service.proto; \
-    else \
-        echo "Warning: No service.proto file found. Please check the file location."; \
-    fi
+# Fix the import in the generated grpc file
+RUN sed -i 's/import service_pb2 as/from . import service_pb2 as/' proto/service_pb2_grpc.py
 
-# Expose backend port
+# Verify the fix
+RUN echo "=== Checking fixed import ===" && \
+    grep "import service_pb2" proto/service_pb2_grpc.py
+
+# Make sure proto directory is a Python package
+RUN touch proto/__init__.py
+
+# Verify generated files
+RUN echo "=== Generated files ===" && \
+    ls -la proto/ && \
+    echo "=== Fixed service_pb2_grpc.py import line ===" && \
+    head -10 proto/service_pb2_grpc.py | grep import
+
 EXPOSE 5000
-
-# Run your server
 CMD ["python", "a_server.py"]

@@ -2,26 +2,19 @@ import grpc
 from concurrent import futures
 from proto import service_pb2, service_pb2_grpc
 import psycopg2
-
-
-conn = psycopg2.connect(
-    host="localhost",
-    port=5432,
-    database="pspd-db",
-    user="pspd-user",
-    password="pspd123"
-)
+import os
 
 
 class ServiceAServicer(service_pb2_grpc.ServiceAServicer):
 
     def __init__(self):
+        # Use environment variables for database connection
         self.conn = psycopg2.connect(
-            host="localhost",
-            port=5432,
-            database="pspd-db",
-            user="pspd-user",
-            password="pspd123"
+            host=os.getenv('DB_HOST', 'localhost'),  # Use 'db' from Docker
+            port=int(os.getenv('DB_PORT', 5432)),
+            database=os.getenv('DB_NAME', 'pspd-db'),
+            user=os.getenv('DB_USER', 'pspd-user'),
+            password=os.getenv('DB_PASSWORD', 'pspd123')
         )
 
     def ListarProdutos(self, request, context):
@@ -114,8 +107,8 @@ class ServiceAServicer(service_pb2_grpc.ServiceAServicer):
 def serve():
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     service_pb2_grpc.add_ServiceAServicer_to_server(ServiceAServicer(), server)
-    server.add_insecure_port("0.0.0.0:50051")
-    print("[Server A - Python] Iniciado com sucesso na porta 50051")
+    server.add_insecure_port("0.0.0.0:5000")  # Changed to match your docker-compose port
+    print("[Server A - Python] Iniciado com sucesso na porta 5000")
     server.start()
     server.wait_for_termination()
 

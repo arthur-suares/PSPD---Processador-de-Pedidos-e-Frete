@@ -2,16 +2,18 @@ import grpc
 from concurrent import futures
 from proto import service_pb2, service_pb2_grpc
 import psycopg2
+import os
 
 
 class ServiceBServicer(service_pb2_grpc.ServiceBServicer):
     def __init__(self):
+        # Use environment variables for database connection
         self.conn = psycopg2.connect(
-            host="localhost",
-            port=5432,
-            database="pspd-db",
-            user="pspd-user",
-            password="pspd123"
+            host=os.getenv('DB_HOST', 'localhost'),  # Use 'db' from Docker
+            port=int(os.getenv('DB_PORT', 5432)),
+            database=os.getenv('DB_NAME', 'pspd-db'),
+            user=os.getenv('DB_USER', 'pspd-user'),
+            password=os.getenv('DB_PASSWORD', 'pspd123')
         )
         
     def Calculate(self, request, context):
