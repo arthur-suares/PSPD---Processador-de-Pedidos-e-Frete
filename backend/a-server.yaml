@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: a-server
+  labels:
+    app: a-server
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: a-server
+  template:
+    metadata:
+      labels:
+        app: a-server
+    spec:
+      containers:
+      - name: a-server
+        image: a_server
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5000
+        env:
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: postgres-user
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: postgres-password
+        - name: DB_HOST
+          value: postgres-service
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_NAME
+          value: pspd-db
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: a-server
+spec:
+  selector:
+    app: a-server
+  ports:
+  - port: 5000
+    targetPort: 5000
+  type: ClusterIP
