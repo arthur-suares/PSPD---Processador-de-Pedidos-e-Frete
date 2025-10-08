@@ -107,7 +107,7 @@ class ServiceAServicer(service_pb2_grpc.ServiceAServicer):
 def serve():
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     service_pb2_grpc.add_ServiceAServicer_to_server(ServiceAServicer(), server)
-    server.add_insecure_port("0.0.0.0:5000")  # Changed to match your docker-compose port
+    server.add_insecure_port("0.0.0.0:5000")  
     print("[Server A - Python] Iniciado com sucesso na porta 5000")
     server.start()
     server.wait_for_termination()
@@ -115,3 +115,4 @@ def serve():
 
 if __name__ == "__main__":
     serve()
+    print("Módulo gRPC (A) rodando em http://localhost:5000")
