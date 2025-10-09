@@ -1,6 +1,7 @@
 import express from "express";
 import grpc from "@grpc/grpc-js";
 import protoLoader from "@grpc/proto-loader";
+import cors from "cors";
 
 const PROTO_PATH = "./proto/service.proto";
 
@@ -14,6 +15,7 @@ const produtoClient = new grpcObject.ServiceA(
   grpcAHost,
   grpc.credentials.createInsecure()
 );
+
 const estoqueClient = new grpcObject.ServiceB(
   grpcBHost,
   grpc.credentials.createInsecure()
@@ -21,6 +23,8 @@ const estoqueClient = new grpcObject.ServiceB(
 
 const app = express();
 const PORT = 4000;
+
+app.use(cors());
 app.use(express.json());
 
 app.get("/produtos", (req, res) => {
