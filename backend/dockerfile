@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y \
 COPY . .
 
 # Generate gRPC Python files INTO the proto directory
-RUN python -m grpc_tools.protoc \
+RUN python3 -m grpc_tools.protoc \
     --proto_path=./proto \
     --python_out=./proto \
     --grpc_python_out=./proto \

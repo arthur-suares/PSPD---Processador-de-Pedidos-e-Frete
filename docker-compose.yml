@@ -19,12 +19,14 @@ services:
       timeout: 5s
       retries: 5
 
+# --- gRPC backend ---
   backend:
     build:
       context: ./backend
     container_name: pspd_backend
-    ports:
-      - "5000:5000"
+    expose:
+      - "5000"
+    command: ["python", "a_server.py"]
     restart: unless-stopped
     depends_on:
       db:
@@ -36,11 +38,29 @@ services:
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import socket; s = socket.socket(); s.connect(('localhost', 5000)); s.close()\" || exit 1"]
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.socket(); s.connect(('localhost', 5000)); s.close()\" || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  # --- REST → gRPC bridge ---
+  gateway:
+    build:
+      context: ./backend
+    container_name: pspd_gateway
+    ports:
+      - "4000:4000"
+    depends_on:
+      - backend
+    # working_dir: /app/backend  
+    environment:
+      - GRPC_A_HOST=backend:5000
+      - GRPC_B_HOST=backend:5001
+    command: ["node", "p-server.js"]
+    restart: unless-stopped
+
+
 
   frontend:
     build:

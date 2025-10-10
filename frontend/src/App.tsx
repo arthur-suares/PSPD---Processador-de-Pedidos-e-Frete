@@ -1,8 +1,8 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Home from "./pages/Home/Home";
 import Product from "./pages/Product/Product";
+import Cadastro from "./pages/Cadastro/Cadastro"
 import celular from "./assets/images/celular.jpg";
-
 
 const products = [
   { 
@@ -61,6 +61,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Home products={products} />} />
         <Route path="/product/:id" element={<Product products={products} />} />
+        <Route path="/cadastro" element={<Cadastro />} />
       </Routes>
     </Router>
   );
