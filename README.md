@@ -105,10 +105,10 @@ Respostas esperadas:
 }
 ```
 
-## Vídeo da apresentação 
-[![Grafos2](https://img.youtube.com/vi/dBiLgd35qYI/0.jpg)](https://www.youtube.com/watch?v=dBiLgd35qYI)
-
 ---
 
 **Banco de dados:** PostgreSQL com gerenciamento via **Prisma ORM**.
+
+## Vídeo da apresentação 
+[![Grafos2](https://img.youtube.com/vi/dBiLgd35qYI/0.jpg)](https://www.youtube.com/watch?v=dBiLgd35qYI)
 
