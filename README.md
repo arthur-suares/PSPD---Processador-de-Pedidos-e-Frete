@@ -1,88 +1,111 @@
 # Processador de Pedidos e Frete
 
-Primeiro laboratório de PSPD a respeito de gRPC
+Primeiro laboratório da disciplina **Programação para Sistemas Paralelos e Distribuídos (PSPD)** sobre **gRPC**.
+
+---
 
 ## Passos para rodar o projeto
 
-O frontend está disponível na porta `5173`. Para rodar acesse a pasta frontend e faça os seguintes comandos
+### Frontend
+O frontend está disponível na porta `5173`.  
+Para rodar, acesse a pasta `frontend` e execute:
 
 ```bash
-⋊> ~/P/frontend on main ⨯ npm i
-⋊> ~/P/frontend on main ⨯ npm run dev
+npm install
+npm run dev
 ```
 
-Quanto ao backend, rode:
-```bash
+---
 
+### Backend
+Antes de iniciar o backend, é necessário criar arquivos `.env` tanto na **raiz do projeto** quanto dentro da **pasta backend**, contendo o seguinte conteúdo:
+
+```bash
+# Configurações do banco de dados
+DB_PORT = 5432
+DB_NAME = pspd-db
+DB_USER = pspd-user
+DB_PASSWORD = pspd123
+
+# URL de conexão com o banco de dados
+DATABASE_URL = postgresql://${DB_USER}:${DB_PASSWORD}@localhost:${DB_PORT}/${DB_NAME}
+```
+
+Depois, acesse a pasta `backend` e rode os comandos:
+
+```bash
+docker compose up --build
+```
+
+Em seguida, ainda dentro da pasta `backend`, rode:
+
+```bash
+npx prisma generate dev
+npx prisma migrate dev
+```
+
+O servidor backend estará disponível para testes na **porta 4000**.
+
+---
+
+### Scripts úteis
+
+```bash
 # Setup completo (instala dependências e gera proto)
 make setup
 
-# Iniciar todos os servers (A, B e P)
+# Iniciar todos os servidores (A, B e P)
 make start-all
 
-# Parar todos os servers
+# Parar todos os servidores
 make stop
 
-# Ver todos os comandos
+# Ver todos os comandos disponíveis
 make help
 ```
 
-Para rodar apenas um serviço gRPC específico, basta usar algum dos scripts abaixo:
+Para rodar apenas um serviço gRPC específico:
 
 ```bash
-# Iniciar apenas o server A
-make start-a
-
-# Iniciar apenas o server B
-make start-b
-
-# Iniciar apenas o server P
-make start-p
+make start-a   # Server A
+make start-b   # Server B
+make start-p   # Server P
 ```
 
-As requisições que podem ser feitas por postman nas rotas:
+---
 
-- http://localhost:3000/api/calculate
-- http://localhost:3000/api/do-something
+### Testando as requisições
 
-devem ser do tipo POST e conter um json como o abaixo:
+Use o Postman ou outro cliente HTTP para testar as rotas:
+
+- `POST http://localhost:4000/api/calculate`
+- `POST http://localhost:4000/api/do-something`
+
+Com o seguinte corpo JSON:
 
 ```json
 {
-    "input": "teste"
+  "input": "teste"
 }
 ```
 
-As respostas esperadas são:
+Respostas esperadas:
 
-POST em `http://localhost:3000/api/do-something`
+`POST /api/do-something`
 ```json
 {
   "output": "gRPC Server (B) processou a requisição. Valor recebido de input: teste"
 }
 ```
 
-Dizendo que o serviço `B` de gRPC processou a requisição
-
-POST em `http://localhost:3000/api/calculate`
+`POST /api/calculate`
 ```json
 {
   "output": "gRPC Server (A) processou a requisição. Valor recebido de input: teste"
 }
 ```
-Dizendo que o serviço `A` de gRPC processou a requisição
 
-## Banco de dados
+---
 
-Para rodar o banco, no diretório raiz do projeto rode
-
-```bash
-docker compose up
-```
-
-Com o banco rodando, rode as migrações das tabelas
-
-```bash
-npx prisma migrate dev
-```
+**Banco de dados:** PostgreSQL com gerenciamento via **Prisma ORM**.
 
