@@ -3,3 +3,4 @@ node_modules
 /proto/service_pb2_grpc.py
 /proto/service_pb2.py
 /proto/__pycache__
+prisma/migrations

@@ -21,8 +21,9 @@ model Produto {
   preco         Float
   estoque       Int         @default(0)
   criadoEm      DateTime    @default(now())
-  atualizadoEm  DateTime    @updatedAt
   estoques      Estoque[]
+
+  @@map("produto")
 }
 
 model Estoque {
@@ -31,4 +32,6 @@ model Estoque {
   quantidade  Int
   localizacao String?
   produto     Produto     @relation(fields: [produtoId], references: [id])
+
+  @@map("estoque")
 }
