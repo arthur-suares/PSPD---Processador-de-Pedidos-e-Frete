@@ -3,11 +3,58 @@ from concurrent import futures
 from proto import service_pb2, service_pb2_grpc
 import psycopg2
 import os
+from prometheus_client import start_http_server, Counter, Summary, Histogram
+
+# --- Definição das Métricas ---
+SERVICE_NAME = 'service_a'
+
+# Contador de requisições gRPC totais (por método e status)
+REQUEST_COUNT = Counter(
+    f'{SERVICE_NAME}_requests_total', 
+    'Contagem total de requisições gRPC', 
+    ['method', 'status_code']
+)
+
+# Histograma para medir a latência (tempo de resposta) das requisições
+# Usamos Histograma para permitir o cálculo de percentis de latência (ex: P95, P99)
+REQUEST_LATENCY = Histogram(
+    f'{SERVICE_NAME}_request_latency_seconds', 
+    'Latência de requisições gRPC em segundos', 
+    ['method']
+)
+
+# --- Wrapper para simplificar a instrumentação ---
+def instrumented(method_handler):
+    """Decorator para instrumentar métodos gRPC com métricas de tempo e contagem."""
+    method_name = method_handler.__name__
+
+    def wrapper(self, request, context):
+        status = 'UNKNOWN'
+        
+        with REQUEST_LATENCY.labels(method=method_name).time():
+            try:
+                response = method_handler(self, request, context)
+                status = 'OK'
+                return response
+            
+            except Exception as e:
+                code = context.code() if context.code() else grpc.StatusCode.INTERNAL
+
+                status_code_name = code.name 
+
+                REQUEST_COUNT.labels(method=method_name, status_code=status_code_name).inc()
+
+                raise e
+            
+            finally:
+                if status == 'OK':
+                    REQUEST_COUNT.labels(method=method_name, status_code='OK').inc()
+    
+    return wrapper
 
 
 class ServiceAServicer(service_pb2_grpc.ServiceAServicer):
     def __init__(self):
-        # Conexão única com o banco
         self.conn = psycopg2.connect(
             host=os.getenv('DB_HOST', 'localhost'),
             port=int(os.getenv('DB_PORT', 5432)),
@@ -16,6 +63,7 @@ class ServiceAServicer(service_pb2_grpc.ServiceAServicer):
             password=os.getenv('DB_PASSWORD', 'pspd123')
         )
 
+    @instrumented
     def ListarProdutos(self, request, context):
         cur = self.conn.cursor()
         try:
@@ -34,10 +82,11 @@ class ServiceAServicer(service_pb2_grpc.ServiceAServicer):
             self.conn.rollback()
             context.set_details(f"Erro ao listar produtos: {e}")
             context.set_code(grpc.StatusCode.INTERNAL)
-            return service_pb2.ListaProdutosResponse()
+            raise grpc.RpcError(e)
         finally:
             cur.close()
 
+    @instrumented
     def ObterProduto(self, request, context):
         cur = self.conn.cursor()
         try:
@@ -46,7 +95,7 @@ class ServiceAServicer(service_pb2_grpc.ServiceAServicer):
             if not row:
                 context.set_details("Produto não encontrado")
                 context.set_code(grpc.StatusCode.NOT_FOUND)
-                return service_pb2.ProdutoResponse()
+                raise grpc.RpcError("Produto não encontrado")
             id, nome, descricao, preco = row
             return service_pb2.ProdutoResponse(
                 id=str(id),
@@ -58,10 +107,11 @@ class ServiceAServicer(service_pb2_grpc.ServiceAServicer):
             self.conn.rollback()
             context.set_details(f"Erro ao obter produto: {e}")
             context.set_code(grpc.StatusCode.INTERNAL)
-            return service_pb2.ProdutoResponse()
+            raise grpc.RpcError(e)
         finally:
             cur.close()
 
+    @instrumented
     def CriarProduto(self, request, context):
         cur = self.conn.cursor()
         try:
@@ -70,23 +120,41 @@ class ServiceAServicer(service_pb2_grpc.ServiceAServicer):
                 (request.nome, request.descricao, request.preco)
             )
             row = cur.fetchone()
+            if not row:
+                raise Exception("Falha ao inserir produto (nenhuma linha retornada)")
+
+            produto_id, nome, descricao, preco = row
+
+            cur.execute(
+                "INSERT INTO estoque (produtoId, quantidade, localizacao) VALUES (%s, %s, %s)",
+                (produto_id, 0, "Depósito Padrão")
+            )
+
             self.conn.commit()
-            id, nome, descricao, preco = row
-            print(f"[Server A] Produto criado: {nome}")
+
+            print(f"[Server A] Produto criado: {nome} (id={produto_id}) com estoque inicial.")
             return service_pb2.ProdutoResponse(
-                id=str(id),
+                id=str(produto_id),
                 nome=nome,
                 descricao=descricao or "",
                 preco=preco
             )
+
         except Exception as e:
-            self.conn.rollback()
+            try:
+                self.conn.rollback()
+            except Exception:
+                pass
+
             context.set_details(f"Erro ao criar produto: {e}")
             context.set_code(grpc.StatusCode.INTERNAL)
-            return service_pb2.ProdutoResponse()
+            raise grpc.RpcError(e)
+
         finally:
             cur.close()
 
+
+    @instrumented
     def EditarProduto(self, request, context):
         cur = self.conn.cursor()
         try:
@@ -98,7 +166,7 @@ class ServiceAServicer(service_pb2_grpc.ServiceAServicer):
                 context.set_details("Produto não encontrado para atualização")
                 context.set_code(grpc.StatusCode.NOT_FOUND)
                 self.conn.rollback()
-                return service_pb2.ProdutoResponse()
+                raise grpc.RpcError("Produto não encontrado")
             row = cur.fetchone()
             self.conn.commit()
             id, nome, descricao, preco = row
@@ -113,37 +181,46 @@ class ServiceAServicer(service_pb2_grpc.ServiceAServicer):
             self.conn.rollback()
             context.set_details(f"Erro ao editar produto: {e}")
             context.set_code(grpc.StatusCode.INTERNAL)
-            return service_pb2.ProdutoResponse()
+            raise grpc.RpcError(e)
         finally:
             cur.close()
 
+    @instrumented
     def DeletarProduto(self, request, context):
         cur = self.conn.cursor()
         try:
-            cur.execute("DELETE FROM produto WHERE id = %s", (request.id,))
+            cur.execute("DELETE FROM estoque WHERE produtoId = %s", (request.id,))
+            cur.execute("DELETE FROM produto WHERE id = %s RETURNING id", (request.id,))
+
             if cur.rowcount == 0:
                 self.conn.rollback()
-                return service_pb2.DeleteResponse(
-                    sucesso=False,
-                    mensagem="Produto não encontrado"
-                )
+                context.set_details("Produto não encontrado")
+                context.set_code(grpc.StatusCode.NOT_FOUND)
+                raise grpc.RpcError("Produto não encontrado")
+
             self.conn.commit()
-            print(f"[Server A] Produto {request.id} deletado.")
+
+            print(f"[Server A] Produto {request.id} deletado (estoque associado removido).")
             return service_pb2.DeleteResponse(
                 sucesso=True,
                 mensagem=f"Produto {request.id} removido com sucesso"
             )
+
         except Exception as e:
-            self.conn.rollback()
+            try:
+                self.conn.rollback()
+            except Exception:
+                pass
+
             context.set_details(f"Erro ao deletar produto: {e}")
             context.set_code(grpc.StatusCode.INTERNAL)
-            return service_pb2.DeleteResponse(
-                sucesso=False,
-                mensagem=f"Erro ao deletar produto: {e}"
-            )
+            raise grpc.RpcError(e)
+
         finally:
             cur.close()
 
+
+    @instrumented
     def DoSomething(self, request, context):
         try:
             input_value = request.input
@@ -152,10 +229,15 @@ class ServiceAServicer(service_pb2_grpc.ServiceAServicer):
         except Exception as e:
             context.set_details(f"Erro interno: {e}")
             context.set_code(grpc.StatusCode.INTERNAL)
-            return service_pb2.Response(output="Erro interno no servidor.")
+            raise grpc.RpcError(e)
 
 
 def serve():
+    # 1. Iniciar o servidor de métricas HTTP (porta 8000)
+    start_http_server(8000)
+    print(f"Servidor de Métricas do Prometheus ({SERVICE_NAME}) iniciado na porta 8000")
+    
+    # 2. Iniciar o servidor gRPC (porta 5000)
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     service_pb2_grpc.add_ServiceAServicer_to_server(ServiceAServicer(), server)
     server.add_insecure_port("0.0.0.0:5000")
@@ -166,4 +248,3 @@ def serve():
 
 if __name__ == "__main__":
     serve()
-    print("Módulo gRPC (A) rodando em http://localhost:5000")

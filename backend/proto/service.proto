@@ -18,6 +18,7 @@ service ServiceA {
 // ======================
 service ServiceB {
   rpc ObterEstoque (EstoqueRequest) returns (EstoqueResponse);
+  rpc CalcularFrete (FreteRequest) returns (FreteResponse);
 }
 
 // ======================
@@ -35,6 +36,7 @@ message ProdutoResponse {
   string nome = 2;
   string descricao = 3;
   double preco = 4;
+  EstoqueResponse estoque = 5;
 }
 
 message CriarProdutoRequest {
@@ -67,6 +69,17 @@ message EstoqueResponse {
   string produto_id = 1;
   int32 quantidade = 2;
   string localizacao = 3;
+}
+
+message FreteRequest {
+    string cep_destino = 1;
+    string produto_id = 2;
+    // Adicione outros campos necessários para o cálculo, como peso, dimensões, etc.
+}
+
+message FreteResponse {
+    double valor_frete = 1;
+    string prazo_entrega = 2; // Ex: "7 dias úteis"
 }
 
 // Mensagens genéricas usadas nos testes

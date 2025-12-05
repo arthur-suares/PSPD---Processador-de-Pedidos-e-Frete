@@ -18,49 +18,122 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - pspd-net
 
-# --- gRPC backend ---
-  backend:
+  # Serviço de Migração do Prisma
+  migrator:
     build:
       context: ./backend
-    container_name: pspd_backend
+    container_name: pspd_migrator
+    command: ["npx", "prisma", "db", "push", "--schema=./prisma/schema.prisma"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME} 
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+    networks:
+      - pspd-net
+    volumes:
+      - ./backend/prisma:/app/prisma 
+
+# --- gRPC Service A (Produtos) ---
+  service_a:
+    build:
+      context: ./backend
+    container_name: pspd_service_a
     expose:
       - "5000"
+      - "8000" 
+    ports:
+      - "5000:5000"
     command: ["python", "a_server.py"]
     restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
+      migrator: 
+        condition: service_completed_successfully
     environment:
       - DB_HOST=db
       - DB_PORT=5432
       - DB_NAME=${DB_NAME}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import socket; s=socket.socket(); s.connect(('localhost', 5000)); s.close()\" || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+    networks:
+      - pspd-net
 
-  # --- REST → gRPC bridge ---
+# --- gRPC Service B (Estoque/Frete) ---
+  service_b: 
+    build:
+      context: ./backend
+    container_name: pspd_service_b
+    expose:
+      - "50052"
+      - "8000" 
+    ports:
+      - "50052:50052" 
+      - "8002:8000"
+    command: ["python", "b_server.py"]
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+    environment:
+     - DB_HOST=db
+     - DB_PORT=5432
+     - DB_NAME=${DB_NAME}
+     - DB_USER=${DB_USER}
+     - DB_PASSWORD=${DB_PASSWORD}
+    networks:
+      - pspd-net
+
+  # --- REST → gRPC bridge (Serviço P / Gateway) ---
   gateway:
     build:
       context: ./backend
     container_name: pspd_gateway
     ports:
-      - "4000:4000"
+      - "4000:4000" 
     depends_on:
-      - backend
-    # working_dir: /app/backend  
+      service_a:
+        condition: service_started
+      service_b:
+        condition: service_started
+      migrator:
+        condition: service_completed_successfully
     environment:
-      - GRPC_A_HOST=backend:5000
-      - GRPC_B_HOST=backend:5001
+      - GRPC_A_HOST=service_a:5000
+      - GRPC_B_HOST=service_b:50052
     command: ["node", "p-server.js"]
     restart: unless-stopped
+    networks:
+      - pspd-net
 
-
+  # --- Prometheus (Monitoramento) ---
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: pspd-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml 
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    depends_on:
+      - service_a
+      - service_b
+      - gateway
+    networks:
+      - pspd-net
 
   frontend:
     build:
@@ -69,7 +142,7 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      - backend
+      - gateway 
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000 || exit 1"]
@@ -77,3 +150,9 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    networks:
+      - pspd-net
+
+networks:
+  pspd-net:
+    driver: bridge
