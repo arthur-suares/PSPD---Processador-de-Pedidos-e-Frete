@@ -1,0 +1,137 @@
+# INSTALAÇÃO BÁSICA DE MONITORAMENTO (PROMETHEUS E GRAFANA)
+
+# --- 1. Namespace de Monitoramento ---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+
+---
+# 2. ConfigMap para o Prometheus (Configuração de Coleta)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring 
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s 
+      evaluation_interval: 15s
+    scrape_configs:
+      # Job 1: Coleta métricas do K8S (para usar no HPA)
+      - job_name: 'kubernetes-nodes'
+        kubernetes_sd_configs:
+          - role: node
+      
+      # Job 2: Coleta métricas do SERVIÇO A (e B) - Porta 8000
+      # Usamos o service discovery do K8S para encontrar a porta 'metrics-port' (8000)
+      - job_name: 'pspd-services'
+        metrics_path: /metrics
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+        # Mantém apenas pods da aplicação (A, B, Gateway)
+        - source_labels: [__meta_kubernetes_pod_label_app]
+          regex: (service-a|service-b|gateway) # Filtra por label
+          action: keep
+        # Obtém a porta de métricas (8000 ou 4000)
+        - source_labels: [__meta_kubernetes_pod_container_port_number]
+          regex: "8000|4000"
+          action: keep
+        - source_labels: [__address__, __meta_kubernetes_pod_container_port_number]
+          regex: (.+);(.+)
+          action: replace
+          target_label: __address__
+          replacement: $1:$2
+        
+---
+# 3. Deploy do Prometheus (Plano de Monitoramento)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus-deployment
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      containers:
+      - name: prometheus
+        image: prom/prometheus:v2.47.0
+        args:
+        - "--config.file=/etc/prometheus/prometheus.yml"
+        - "--storage.tsdb.retention.time=15d"
+        ports:
+        - containerPort: 9090
+        volumeMounts:
+        - name: prometheus-config-volume
+          mountPath: /etc/prometheus/
+      volumes:
+      - name: prometheus-config-volume
+        configMap:
+          name: prometheus-config
+
+---
+# 4. Service para o Prometheus (Acessível via ClusterIP)
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-service
+  namespace: monitoring
+spec:
+  selector:
+    app: prometheus
+  type: NodePort
+  ports:
+  - port: 9090
+    targetPort: 9090
+
+---
+# 5. Deploy do Grafana (Visualização das Métricas)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana-deployment
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+      - name: grafana
+        image: grafana/grafana:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          value: "prom_admin" 
+        - name: GF_SECURITY_ADMIN_USER
+          value: "admin"
+---
+# 6. Service para o Grafana (UI)
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-service
+  namespace: monitoring
+spec:
+  selector:
+    app: grafana
+  type: NodePort
+  ports:
+  - port: 3000
+    targetPort: 3000
+    nodePort: 30000

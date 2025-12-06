@@ -11,7 +11,7 @@ const grpcObject = grpc.loadPackageDefinition(packageDef).services;
 
 // Variáveis de ambiente
 const grpcAHost = process.env.GRPC_A_HOST || "backend:5000";
-const grpcBHost = process.env.GRPC_B_HOST || "backend:50052"; // Porta 50052 do serviço B
+const grpcBHost = process.env.GRPC_B_HOST || "backend:50052";
 
 // Inicialização dos clientes gRPC
 const produtoClient = new grpcObject.ServiceA(
@@ -34,11 +34,9 @@ app.use(express.json());
 // CONFIGURAÇÃO DO PROMETHEUS
 // ===================================
 
-// 1. Coletar Métricas Padrão do Node.js
 const collectDefaultMetrics = client.collectDefaultMetrics;
 collectDefaultMetrics({ prefix: 'node_app_', timeout: 10000 });
 
-// 2. Definir Métricas Personalizadas para Rotas HTTP
 const httpRequestsTotal = new client.Counter({
   name: 'http_requests_total',
   help: 'Total de requisições HTTP para o API Gateway (P)',
@@ -49,10 +47,9 @@ const httpRequestDurationMicroseconds = new client.Histogram({
   name: 'http_request_duration_seconds',
   help: 'Latência das requisições HTTP em segundos',
   labelNames: ['method', 'route', 'status_code'],
-  buckets: [0.005, 0.01, 0.05, 0.1, 0.2, 0.5, 1, 2, 5], // Buckets para medição de latência
+  buckets: [0.005, 0.01, 0.05, 0.1, 0.2, 0.5, 1, 2, 5], 
 });
 
-// 3. Middleware de Instrumentação
 app.use((req, res, next) => {
   const end = httpRequestDurationMicroseconds.startTimer();
   
@@ -60,10 +57,8 @@ app.use((req, res, next) => {
     const route = req.route ? req.route.path : 'unknown_route';
     const status_code = res.statusCode;
 
-    // Incrementa o contador de requisições
     httpRequestsTotal.labels(req.method, route, status_code).inc();
     
-    // Registra a duração da requisição
     end({ method: req.method, route: route, status_code: status_code });
   });
 

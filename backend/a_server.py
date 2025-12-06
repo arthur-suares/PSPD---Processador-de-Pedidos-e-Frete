@@ -16,7 +16,6 @@ REQUEST_COUNT = Counter(
 )
 
 # Histograma para medir a latência (tempo de resposta) das requisições
-# Usamos Histograma para permitir o cálculo de percentis de latência (ex: P95, P99)
 REQUEST_LATENCY = Histogram(
     f'{SERVICE_NAME}_request_latency_seconds', 
     'Latência de requisições gRPC em segundos', 
@@ -40,6 +39,7 @@ def instrumented(method_handler):
             except Exception as e:
                 code = context.code() if context.code() else grpc.StatusCode.INTERNAL
 
+                # Obtém o nome do status (corrigido para o problema de enum)
                 status_code_name = code.name 
 
                 REQUEST_COUNT.labels(method=method_name, status_code=status_code_name).inc()
@@ -56,12 +56,13 @@ def instrumented(method_handler):
 class ServiceAServicer(service_pb2_grpc.ServiceAServicer):
     def __init__(self):
         self.conn = psycopg2.connect(
-            host=os.getenv('DB_HOST', 'localhost'),
+            host=os.getenv('DB_HOST'),
             port=int(os.getenv('DB_PORT', 5432)),
             database=os.getenv('DB_NAME', 'pspd-db'),
             user=os.getenv('DB_USER', 'pspd-user'),
             password=os.getenv('DB_PASSWORD', 'pspd123')
         )
+        self.conn.autocommit = True
 
     @instrumented
     def ListarProdutos(self, request, context):
@@ -126,12 +127,10 @@ class ServiceAServicer(service_pb2_grpc.ServiceAServicer):
             produto_id, nome, descricao, preco = row
 
             cur.execute(
-                "INSERT INTO estoque (produtoId, quantidade, localizacao) VALUES (%s, %s, %s)",
+                "INSERT INTO estoque (\"produtoId\", quantidade, localizacao) VALUES (%s, %s, %s)",
                 (produto_id, 0, "Depósito Padrão")
             )
-
-            self.conn.commit()
-
+            
             print(f"[Server A] Produto criado: {nome} (id={produto_id}) com estoque inicial.")
             return service_pb2.ProdutoResponse(
                 id=str(produto_id),
@@ -165,10 +164,8 @@ class ServiceAServicer(service_pb2_grpc.ServiceAServicer):
             if cur.rowcount == 0:
                 context.set_details("Produto não encontrado para atualização")
                 context.set_code(grpc.StatusCode.NOT_FOUND)
-                self.conn.rollback()
                 raise grpc.RpcError("Produto não encontrado")
             row = cur.fetchone()
-            self.conn.commit()
             id, nome, descricao, preco = row
             print(f"[Server A] Produto editado: {nome}")
             return service_pb2.ProdutoResponse(
@@ -178,7 +175,6 @@ class ServiceAServicer(service_pb2_grpc.ServiceAServicer):
                 preco=preco
             )
         except Exception as e:
-            self.conn.rollback()
             context.set_details(f"Erro ao editar produto: {e}")
             context.set_code(grpc.StatusCode.INTERNAL)
             raise grpc.RpcError(e)
@@ -189,16 +185,14 @@ class ServiceAServicer(service_pb2_grpc.ServiceAServicer):
     def DeletarProduto(self, request, context):
         cur = self.conn.cursor()
         try:
-            cur.execute("DELETE FROM estoque WHERE produtoId = %s", (request.id,))
+            cur.execute("DELETE FROM estoque WHERE \"produtoId\" = %s", (request.id,))
             cur.execute("DELETE FROM produto WHERE id = %s RETURNING id", (request.id,))
 
             if cur.rowcount == 0:
-                self.conn.rollback()
                 context.set_details("Produto não encontrado")
                 context.set_code(grpc.StatusCode.NOT_FOUND)
                 raise grpc.RpcError("Produto não encontrado")
 
-            self.conn.commit()
 
             print(f"[Server A] Produto {request.id} deletado (estoque associado removido).")
             return service_pb2.DeleteResponse(
@@ -233,12 +227,16 @@ class ServiceAServicer(service_pb2_grpc.ServiceAServicer):
 
 
 def serve():
-    # 1. Iniciar o servidor de métricas HTTP (porta 8000)
     start_http_server(8000)
     print(f"Servidor de Métricas do Prometheus ({SERVICE_NAME}) iniciado na porta 8000")
     
-    # 2. Iniciar o servidor gRPC (porta 5000)
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+   
+    try:
+        ServiceAServicer()
+    except Exception as e:
+        print(f"Erro fatal na conexão inicial do DB: {e}. O initContainer pode ter avançado muito rápido.")
+        
     service_pb2_grpc.add_ServiceAServicer_to_server(ServiceAServicer(), server)
     server.add_insecure_port("0.0.0.0:5000")
     print("[Server A - Python] Iniciado com sucesso na porta 5000")

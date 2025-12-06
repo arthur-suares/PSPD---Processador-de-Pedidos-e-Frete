@@ -1,0 +1,408 @@
+# MANIFESTOS ORDENADOS: DB -> MIGRADOR -> APLICAÇÃO -> TESTES
+
+# =========================================================
+# FASE 1: BANCO DE DADOS (DB) E MIGRAÇÃO
+# =========================================================
+
+# --- 1. Serviço (DNS) para o PostgreSQL ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pspd-db-service 
+  labels:
+    app: postgres
+spec:
+  ports:
+    - port: 5432
+      targetPort: 5432
+  selector:
+    app: postgres
+  type: ClusterIP
+
+---
+# 2. Configuração de Volume Persistente para o DB
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  labels:
+    app: postgres
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi 
+      
+---
+# 3. DEPLOYMENT para o PostgreSQL
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-deployment
+  labels:
+    app: postgres
+spec:
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:17
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5432
+        env: 
+        - name: POSTGRES_DB
+          value: "pspd-db"
+        - name: POSTGRES_USER
+          value: "pspd-user"
+        - name: POSTGRES_PASSWORD
+          value: "pspd123" 
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: postgres-storage
+      volumes:
+      - name: postgres-storage
+        persistentVolumeClaim:
+          claimName: postgres-pvc
+
+---
+# 4. JOB para o Migrator do Prisma
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: prisma-migrator-job
+  labels:
+    job: migrator
+spec:
+  template:
+    metadata:
+      labels:
+        job: migrator
+    spec:
+      restartPolicy: OnFailure 
+      initContainers: 
+      - name: wait-for-postgres
+        image: busybox:1.36.1
+        command: ['sh', '-c', 'until nc -z pspd-db-service 5432; do echo Waiting for Postgres; sleep 2; done;']
+      containers:
+      - name: prisma-migrator
+        image: docker.io/pspdtf/pspd-backend:v1.0 
+        imagePullPolicy: Always
+        command: ["npx", "prisma", "db", "push", "--schema=./prisma/schema.prisma"] 
+        env:
+        - name: DATABASE_URL
+          value: "postgresql://pspd-user:pspd123@pspd-db-service:5432/pspd-db" 
+        volumeMounts:
+        - mountPath: /app/prisma 
+          name: prisma-config
+      volumes:
+      - name: prisma-config
+        hostPath: 
+          path: /home/larilari/PSPD---Processador-de-Pedidos-e-Frete/backend/prisma # <-- AJUSTE ESTE CAMINHO
+          type: DirectoryOrCreate
+
+# =========================================================
+# FASE 2: APLICAÇÃO (A, B, GATEWAY) E AUTOSCALING
+# =========================================================
+
+---
+# 5. DEPLOYMENT para o SERVIÇO A (Produtos - Python)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-a-deployment
+  labels:
+    app: service-a
+spec:
+  replicas: 1 
+  selector:
+    matchLabels:
+      app: service-a
+  template:
+    metadata:
+      labels:
+        app: service-a
+    spec:
+      restartPolicy: Always
+      initContainers:
+      - name: wait-for-db
+        image: busybox:1.36.1
+        command: ['sh', '-c', 'until nc -z pspd-db-service 5432; do echo waiting for db to start; sleep 2; done;']
+      containers:
+      - name: service-a
+        image: docker.io/pspdtf/pspd-backend:v1.0 
+        imagePullPolicy: Always
+        ports:
+        - name: grpc
+          containerPort: 5000
+        - name: metrics
+          containerPort: 8000
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi" 
+          limits:
+            cpu: "300m"
+            memory: "256Mi"
+        env:
+        - name: DB_HOST
+          value: "pspd-db-service" 
+
+---
+# 6. HPA para SERVIÇO A (Escalonamento por uso de CPU)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: service-a-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: service-a-deployment
+  minReplicas: 1
+  maxReplicas: 5 
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization 
+        averageUtilization: 70 
+
+---
+# 7. SERVICE para o SERVIÇO A (DNS Interno)
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-a-service
+  labels:
+    app: service-a
+spec:
+  selector:
+    app: service-a
+  type: ClusterIP 
+  ports:
+    - name: grpc-port
+      protocol: TCP
+      port: 5000 
+      targetPort: 5000
+    - name: metrics-port
+      protocol: TCP
+      port: 8000
+      targetPort: 8000
+
+---
+# 8. DEPLOYMENT para o SERVIÇO B (Estoque/Frete - Python)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-b-deployment
+  labels:
+    app: service-b
+spec:
+  replicas: 1 
+  selector:
+    matchLabels:
+      app: service-b
+  template:
+    metadata:
+      labels:
+        app: service-b
+    spec:
+      initContainers:
+      - name: wait-for-db
+        image: busybox:1.36.1
+        command: ['sh', '-c', 'until nc -z pspd-db-service 5432; do echo waiting for db to start; sleep 2; done;']
+      containers:
+      - name: service-b
+        image: docker.io/pspdtf/pspd-backend:v1.0
+        imagePullPolicy: Always
+        ports:
+        - name: grpc
+          containerPort: 50052
+        - name: metrics
+          containerPort: 8000
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi" 
+          limits:
+            cpu: "300m"
+            memory: "256Mi"
+        env: 
+        - name: DB_HOST
+          value: "pspd-db-service"
+
+---
+# 9. SERVICE para o SERVIÇO B (DNS Interno)
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-b-service
+  labels:
+    app: service-b
+spec:
+  selector:
+    app: service-b
+  type: ClusterIP 
+  ports:
+    - name: grpc-port
+      protocol: TCP
+      port: 50052 
+      targetPort: 50052
+    - name: metrics-port
+      protocol: TCP
+      port: 8000
+      targetPort: 8000
+
+---
+# 10. DEPLOYMENT para o GATEWAY (Serviço P - Node.js)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway-deployment
+  labels:
+    app: gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: gateway
+  template:
+    metadata:
+      labels:
+        app: gateway
+    spec:
+      initContainers:
+      - name: wait-for-db
+        image: busybox:1.36.1
+        command: ['sh', '-c', 'until nc -z pspd-db-service 5432; do echo waiting for db to start; sleep 2; done;']
+      containers:
+      - name: gateway
+        image: docker.io/pspdtf/pspd-backend:v1.0
+        command: ["node", "p-server.js"]
+        imagePullPolicy: Always
+        ports:
+        - name: api-metrics
+          containerPort: 4000
+        resources:
+          requests:
+            cpu: "150m"
+            memory: "256Mi"
+          limits:
+            cpu: "300m"
+            memory: "512Mi"
+        env:
+        - name: GRPC_A_HOST
+          value: "service-a-service:5000" 
+        - name: GRPC_B_HOST
+          value: "service-b-service:50052" 
+
+---
+# 11. SERVICE para o GATEWAY (LoadBalancer - Acessível externamente)
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway-service
+  labels:
+    app: gateway
+spec:
+  selector:
+    app: gateway
+  type: LoadBalancer 
+  ports:
+    - name: http
+      protocol: TCP
+      port: 4000 
+      targetPort: 4000
+
+# =========================================================
+# FASE 3: TESTE DE CARGA (LOCUST)
+# =========================================================
+
+---
+# 12. Deploy do LOCUST MASTER
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: locust-master-deployment
+  labels:
+    app: locust-master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: locust-master
+  template:
+    metadata:
+      labels:
+        app: locust-master
+    spec:
+      containers:
+      - name: locust-master
+        image: docker.io/pspdtf/locust-tester:v1.0 
+        imagePullPolicy: Always
+        command: ["locust", "-f", "/home/locust/locustfile.py", "--master", 
+                  "--web-host", "0.0.0.0", 
+                  "--host", "http://gateway-service:4000"]
+        ports:
+        - containerPort: 8089 
+        - containerPort: 5557 # Comunicação interna
+        - containerPort: 5558 # Comunicação interna
+
+---
+# 13. SERVICE para o LOCUST MASTER (Corrigido para Comunicação Interna)
+apiVersion: v1
+kind: Service
+metadata:
+  name: locust-master-service
+spec:
+  selector:
+    app: locust-master
+  type: ClusterIP
+  ports:
+  - name: http-ui
+    port: 8089
+    targetPort: 8089
+  - name: loc-bind
+    port: 5557
+    targetPort: 5557
+  - name: loc-master
+    port: 5558
+    targetPort: 5558
+
+---
+# 14. Deploy dos agentes (workers) do Locust que geram a carga real
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: locust-worker-deployment
+  labels:
+    app: locust-worker
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: locust-worker
+  template:
+    metadata:
+      labels:
+        app: locust-worker
+    spec:
+      containers:
+      - name: locust-worker
+        image: docker.io/pspdtf/locust-tester:v1.0 
+        imagePullPolicy: Always
+        command: ["locust", "-f", "/home/locust/locustfile.py", "--worker",
+                  "--master-host", "locust-master-service"] 
+        resources:
+          requests:
+            cpu: "250m" 
+            memory: "256Mi"

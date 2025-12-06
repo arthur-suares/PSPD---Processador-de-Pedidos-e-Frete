@@ -4,13 +4,14 @@ from proto import service_pb2, service_pb2_grpc
 import psycopg2
 import os
 from prometheus_client import start_http_server, Counter, Summary, Histogram
+import uuid 
 
 # --- Definição das Métricas ---
 SERVICE_NAME = 'service_b'
 REQUEST_COUNT = Counter(f'{SERVICE_NAME}_requests_total', 'Contagem total de requisições gRPC', ['method', 'status_code'])
 REQUEST_LATENCY = Histogram(f'{SERVICE_NAME}_request_latency_seconds', 'Latência de requisições gRPC em segundos', ['method'])
 
-# --- Wrapper para instrumentação ---
+# --- Wrapper para instrumentação (ESTÁVEL) ---
 def instrumented(method_handler):
     """Decorator para instrumentar métodos gRPC com métricas de tempo e contagem."""
     method_name = method_handler.__name__
@@ -45,7 +46,7 @@ class ServiceBServicer(service_pb2_grpc.ServiceBServicer):
     
     def _get_db_connection(self):
         conn = psycopg2.connect(
-            host=os.getenv('DB_HOST', 'localhost'),
+            host=os.getenv('DB_HOST'),
             port=int(os.getenv('DB_PORT', 5432)),
             database=os.getenv('DB_NAME', 'pspd-db'),
             user=os.getenv('DB_USER', 'pspd-user'),
@@ -59,12 +60,12 @@ class ServiceBServicer(service_pb2_grpc.ServiceBServicer):
         conn = None
         cur = None
         try:
-            # ABRIMOS A CONEXÃO DENTRO DO MÉTODO
             conn = self._get_db_connection()
             cur = conn.cursor()
-            
-            # Consulta SQL: Aspas duplas para forçar o case-sensitivity (produtoId)
-            cur.execute('SELECT "produtoId", quantidade, localizacao FROM estoque WHERE "produtoId" = %s', (request.produto_id,))
+
+            produto_uuid = uuid.UUID(request.produto_id) 
+
+            cur.execute('SELECT "produtoId", quantidade, localizacao FROM estoque WHERE "produtoId" = %s', (produto_uuid,))
             row = cur.fetchone()
             
             if not row:
@@ -80,14 +81,17 @@ class ServiceBServicer(service_pb2_grpc.ServiceBServicer):
             )
         
         except psycopg2.Error as e:
-            # Se houver erro, tenta fechar e re-lançar
             if conn: conn.rollback()
             context.set_details(f"Erro de DB: {e}")
             context.set_code(grpc.StatusCode.INTERNAL)
             raise Exception(e) 
             
+        except ValueError as e:
+            context.set_details(f"ID do produto inválido: {e}")
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            raise Exception(e)
+            
         finally:
-            # FECHAMOS O CURSOR E A CONEXÃO
             if cur: cur.close()
             if conn: conn.close()
 
@@ -118,6 +122,12 @@ def serve():
     print(f"Servidor de Métricas do Prometheus ({SERVICE_NAME}) iniciado na porta 8000")
     
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    
+    try:
+        ServiceBServicer()._get_db_connection().close()
+    except Exception as e:
+        print(f"Erro fatal na conexão inicial do DB: {e}.")
+        
     service_pb2_grpc.add_ServiceBServicer_to_server(ServiceBServicer(), server)
     server.add_insecure_port("0.0.0.0:50052")
     print("[Server B - Python] Iniciado com sucesso na porta 50052")

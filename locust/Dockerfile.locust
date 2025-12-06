@@ -1,0 +1,14 @@
+# Imagem base Python slim
+FROM python:3.11-slim
+
+# Instala o Locust
+RUN pip install --no-cache-dir locust
+
+# Define o diretório de trabalho
+WORKDIR /home/locust
+
+# Copia o script de teste
+COPY locustfile.py .
+
+# O ENTRYPOINT será usado no K8S para iniciar o teste
+ENTRYPOINT ["locust"]
