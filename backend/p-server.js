@@ -6,7 +6,13 @@ import client from "prom-client";
 
 const PROTO_PATH = "./proto/service.proto";
 
-const packageDef = protoLoader.loadSync(PROTO_PATH);
+const packageDef = protoLoader.loadSync(PROTO_PATH, {
+  keepCase: true,  // Mantém snake_case dos nomes de campos
+  longs: String,
+  enums: String,
+  defaults: true,
+  oneofs: true
+});
 const grpcObject = grpc.loadPackageDefinition(packageDef).services;
 
 // Variáveis de ambiente
