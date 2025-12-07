@@ -34,12 +34,12 @@ CREATE TABLE produto (
 
 CREATE TABLE estoque (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  "produto_id" UUID NOT NULL REFERENCES produto(id) ON DELETE CASCADE,
+  "produtoId" UUID NOT NULL REFERENCES produto(id) ON DELETE CASCADE,
   quantidade INT NOT NULL,
   localizacao TEXT
 );
 
-CREATE INDEX idx_estoque_produto ON estoque("produto_id");
+CREATE INDEX idx_estoque_produto ON estoque("produtoId");
 """
 )
 
@@ -122,7 +122,7 @@ estoques_data = [
 total_estoque = 0
 for produto_id, quantidade, localizacao in estoques_data:
     cur.execute(
-        'INSERT INTO estoque ("produto_id", quantidade, localizacao) VALUES (%s, %s, %s)',
+        'INSERT INTO estoque ("produtoId", quantidade, localizacao) VALUES (%s, %s, %s)',
         (produto_id, quantidade, localizacao),
     )
     total_estoque += quantidade
@@ -145,7 +145,7 @@ cur.execute(
         COALESCE(SUM(e.quantidade), 0) as total_estoque,
         COUNT(e.id) as num_locais
     FROM produto p
-    LEFT JOIN estoque e ON p.id = e."produto_id"
+    LEFT JOIN estoque e ON p.id = e."produtoId"
     GROUP BY p.id, p.nome, p.preco
     ORDER BY p.nome
 """
