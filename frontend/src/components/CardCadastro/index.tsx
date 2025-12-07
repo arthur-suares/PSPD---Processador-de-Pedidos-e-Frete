@@ -1,5 +1,5 @@
 import React, { useState, type FormEvent } from "react";
-// import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { PuffLoader } from "react-spinners";
@@ -12,6 +12,7 @@ import {
     Input,
     TextArea,
     Button,
+    BackButton,
 } from "./style";
 
 interface Formulario {
@@ -26,7 +27,7 @@ const CardCadastro: React.FC = () => {
     const [preco, setPreco] = useState<string>("");
     const [isLoading, setIsLoading] = useState<boolean>(false);
 
-    // const navigate = useNavigate();
+    const navigate = useNavigate();
 
     const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -90,6 +91,10 @@ const CardCadastro: React.FC = () => {
                 <Button type="submit" disabled={isLoading}>
                     {isLoading ? "Cadastrando..." : "Cadastrar"}
                 </Button>
+
+                <BackButton type="button" onClick={() => navigate("/")}>
+                    ← Voltar
+                </BackButton>
                 
                 {isLoading && (
                     <div style={{ textAlign: "center", marginTop: "1rem" }}>

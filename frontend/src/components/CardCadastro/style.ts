@@ -78,3 +78,28 @@ export const Select = styled.select`
   border: 1px solid #ccc;
   border-radius: 4px;
 `;
+
+
+
+export const BackButton = styled.button`
+  width: 100%;
+  padding: 0.8rem 1.5rem;
+  font-size: 1rem;
+  color: #BE6E46;
+  background-color: transparent;
+  border: 2px solid #BE6E46;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-weight: bold;
+  margin-top: 0.5rem;
+
+  &:hover {
+    background-color: #BE6E46;
+    color: white;
+  }
+
+  &:active {
+    transform: scale(0.98);
+  }
+`;
