@@ -99,14 +99,6 @@ spec:
         env:
         - name: DATABASE_URL
           value: "postgresql://pspd-user:pspd123@pspd-db-service:5432/pspd-db" 
-        volumeMounts:
-        - mountPath: /app/prisma 
-          name: prisma-config
-      volumes:
-      - name: prisma-config
-        hostPath: 
-          path: /home/larilari/PSPD---Processador-de-Pedidos-e-Frete/backend/prisma # <-- AJUSTE ESTE CAMINHO
-          type: DirectoryOrCreate
 
 # =========================================================
 # FASE 2: APLICAÇÃO (A, B, GATEWAY) E AUTOSCALING
@@ -224,6 +216,7 @@ spec:
       - name: service-b
         image: docker.io/pspdtf/pspd-backend:v1.0
         imagePullPolicy: Always
+        command: ["python3", "b_server.py"]  # Sobrescreve o CMD do Dockerfile
         ports:
         - name: grpc
           containerPort: 50052
@@ -358,7 +351,7 @@ spec:
         - containerPort: 5558 # Comunicação interna
 
 ---
-# 13. SERVICE para o LOCUST MASTER (Corrigido para Comunicação Interna)
+# 13. SERVICE para o LOCUST MASTER (LoadBalancer para acesso externo ao invés do ClusterIP)
 apiVersion: v1
 kind: Service
 metadata:
@@ -366,7 +359,7 @@ metadata:
 spec:
   selector:
     app: locust-master
-  type: ClusterIP
+  type: LoadBalancer
   ports:
   - name: http-ui
     port: 8089
