@@ -7,7 +7,53 @@ metadata:
   name: monitoring
 
 ---
-# 2. ConfigMap para o Prometheus (Configuração de Coleta)
+# 2. ServiceAccount para o Prometheus
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: monitoring
+
+---
+# 3. ClusterRole - Permissões para descobrir pods e nodes
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+rules:
+- apiGroups: [""]
+  resources:
+  - nodes
+  - nodes/proxy
+  - services
+  - endpoints
+  - pods
+  verbs: ["get", "list", "watch"]
+- apiGroups:
+  - extensions
+  resources:
+  - ingresses
+  verbs: ["get", "list", "watch"]
+- nonResourceURLs: ["/metrics"]
+  verbs: ["get"]
+
+---
+# 4. ClusterRoleBinding - Associa ServiceAccount ao ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+- kind: ServiceAccount
+  name: prometheus
+  namespace: monitoring
+
+---
+# 5. ConfigMap para o Prometheus (Configuração de Coleta)
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -33,15 +79,15 @@ data:
         relabel_configs:
         # Mantém apenas pods da aplicação (A, B, Gateway)
         - source_labels: [__meta_kubernetes_pod_label_app]
-          regex: (service-a|service-b|gateway) # Filtra por label
+          regex: (service-a|service-b|gateway)
           action: keep
         # Obtém a porta de métricas (8000 ou 4000)
         - source_labels: [__meta_kubernetes_pod_container_port_number]
           regex: "8000|4000"
           action: keep
-        - source_labels: [__address__, __meta_kubernetes_pod_container_port_number]
+        # Corrige o endereço para usar IP:porta correto
+        - source_labels: [__meta_kubernetes_pod_ip, __meta_kubernetes_pod_container_port_number]
           regex: (.+);(.+)
-          action: replace
           target_label: __address__
           replacement: $1:$2
         
@@ -62,6 +108,7 @@ spec:
       labels:
         app: prometheus
     spec:
+      serviceAccountName: prometheus  # Adiciona o ServiceAccount
       containers:
       - name: prometheus
         image: prom/prometheus:v2.47.0
