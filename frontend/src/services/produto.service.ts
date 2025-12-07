@@ -7,6 +7,10 @@ export interface Produto {
   nome: string;
   descricao: string;
   preco: string;
+  estoque?: {
+    quantidade: number;
+    localizacoes: string;
+  };
 }
 
 const produtoService = {
@@ -20,6 +24,27 @@ const produtoService = {
   getProdutos: async () => {
     const response = await axios.get(`${API_URL}/produtos`);
     return response.data;
+  },
+
+  // Buscar todos os produtos com estoque
+  getProdutosComEstoque: async () => {
+    const produtosResponse = await axios.get(`${API_URL}/produtos`);
+    const produtos = produtosResponse.data;
+    
+    // Buscar estoque para cada produto
+    const produtosComEstoque = await Promise.all(
+      produtos.map(async (produto: any) => {
+        try {
+          const produtoComEstoque = await axios.get(`${API_URL}/produto/${produto.id}`);
+          return produtoComEstoque.data;
+        } catch (error) {
+          // Se falhar ao buscar estoque, retorna produto sem estoque
+          return { ...produto, estoque: null };
+        }
+      })
+    );
+    
+    return produtosComEstoque;
   },
 
   // Buscar produto por ID
